@@ -225,6 +225,12 @@ async fn event_loop(
                     }
                     continue;
                 }
+                // `openscq30-lib` panics (not errors) when asked to write a setting the model
+                // doesn't register, e.g. a tray ambient-mode pick on earbuds without ambient modes.
+                if is_ambient_write(&command) && device.setting(&SettingId::AmbientSoundMode).is_none() {
+                    tracing::warn!(?command, "dropping ambient write: device has no ambient modes");
+                    continue;
+                }
                 if read_only_controls && is_control_write(&command) {
                     tracing::warn!(?command, "dropping control write for a read-only-controls profile");
                     continue;
@@ -318,6 +324,13 @@ async fn disconnect_bluetooth(mac_address: MacAddr6) -> Result<()> {
         .disconnect()
         .await
         .context("BlueZ could not disconnect the earbuds")
+}
+
+fn is_ambient_write(command: &DeviceCommand) -> bool {
+    matches!(
+        command,
+        DeviceCommand::SetListeningMode(_) | DeviceCommand::SetAmbientLevel(_)
+    )
 }
 
 /// Daily and button settings are the only `DeviceCommand`s that write arbitrary setting ids.
